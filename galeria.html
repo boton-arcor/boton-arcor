@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot-ON — Galería</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#fbf7ee; --ink:#2a2620; --muted:#7a715e; --line:#e3dac4;
+    --amber-deep:#a9711a; --navy:#13327a; --ok:#3e7c7b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:#10141b;
+    font-family:'Inter',sans-serif; color:var(--ink); padding:24px 14px;
+  }
+  .wrap{ max-width:900px; margin:0 auto; }
+  .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; color:#fbf7ee; }
+  .top h1{ font-family:'Fraunces',serif; font-size:24px; margin:0; }
+  .top .filtros{ display:flex; gap:6px; }
+  .top .filtros button{
+    background:#1c2431; color:#c7cee0; border:1px solid #2a3550; font-size:12px;
+    padding:6px 12px; border-radius:20px; cursor:pointer;
+  }
+  .top .filtros button.activo{ background:var(--amber-deep); color:#fff8ea; border-color:var(--amber-deep); }
+  .item{
+    background:var(--paper); border-radius:14px; padding:16px 18px; margin-bottom:14px;
+    box-shadow:0 12px 26px -14px rgba(0,0,0,.5);
+  }
+  .item .head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .item .id{ font-family:'Fraunces',serif; font-size:17px; font-weight:600; }
+  .item .estado{
+    font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px;
+    background:#efe7d4; color:var(--amber-deep);
+  }
+  .item .estado.resuelto{ background:#dcefe9; color:var(--ok); }
+  .item .estado.leido{ background:#e5eaf6; color:var(--navy); }
+  .item .dir{ font-size:14px; margin-top:6px; }
+  .item .com{ font-size:13px; color:var(--muted); margin-top:2px; }
+  .fotos{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .fotos .col .lbl{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+  .fotos .col .box{
+    width:100%; aspect-ratio:4/3; border-radius:9px; background:#efe9db; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;
+  }
+  .fotos .col .box img{ width:100%; height:100%; object-fit:cover; display:block; cursor:pointer; }
+  .spinner{ width:28px; height:28px; border:3px solid #2a3550; border-top-color:var(--amber-deep); border-radius:50%; animation:spin .8s linear infinite; margin:60px auto; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .vacio{ color:#c7cee0; text-align:center; padding:50px; }
+  /* lightbox */
+  #lb{ position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; align-items:center; justify-content:center; padding:20px; z-index:10; }
+  #lb img{ max-width:100%; max-height:100%; border-radius:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Bot-ON — Galería</h1>
+    <div class="filtros" id="filtros">
+      <button data-f="todos" class="activo">Todas</button>
+      <button data-f="Pendiente">Pendientes</button>
+      <button data-f="Resuelto">Resueltas</button>
+    </div>
+  </div>
+  <div id="cont"><div class="spinner"></div></div>
+</div>
+<div id="lb"><img id="lbImg" alt=""></div>
+
+<script>
+const BACKEND = "https://script.google.com/macros/s/AKfycbx2mFs_yfErRqgHd3RrUN3ou1yQnI97CAEISpePrSyinI2wrNi0839cpHUGHf4uq5hY/exec";
+const cont = document.getElementById("cont");
+let todas = [];
+let filtro = "todos";
+
+const lb = document.getElementById("lb");
+const lbImg = document.getElementById("lbImg");
+lb.addEventListener("click", ()=> lb.style.display="none");
+
+function estadoClase(e){ return e==="Resuelto"?"resuelto":(e==="Leído"?"leido":""); }
+
+function cargarFoto(fotoId, boxEl){
+  if(!fotoId){ boxEl.textContent="Sin foto"; return; }
+  fetch(BACKEND+"?foto="+encodeURIComponent(fotoId))
+    .then(r=>r.json())
+    .then(f=>{
+      if(f.ok){
+        const img=document.createElement("img");
+        img.src=f.base64;
+        img.addEventListener("click", ()=>{ lbImg.src=f.base64; lb.style.display="flex"; });
+        boxEl.innerHTML=""; boxEl.appendChild(img);
+      } else { boxEl.textContent="No disponible"; }
+    })
+    .catch(()=>{ boxEl.textContent="No disponible"; });
+}
+
+function render(){
+  const lista = todas.filter(x=> filtro==="todos" ? true : x.estado===filtro);
+  if(!lista.length){ cont.innerHTML='<div class="vacio">No hay botoneadas para mostrar.</div>'; return; }
+  cont.innerHTML="";
+  lista.forEach(d=>{
+    const div=document.createElement("div");
+    div.className="item";
+    div.innerHTML=
+      '<div class="head"><span class="id">'+d.id+'</span>'+
+      '<span class="estado '+estadoClase(d.estado)+'">'+d.estado+'</span></div>'+
+      '<div class="dir">'+(d.direccion||"")+'</div>'+
+      '<div class="com">'+(d.comentario||"")+'</div>'+
+      '<div class="fotos">'+
+        '<div class="col"><div class="lbl">Botoneada</div><div class="box" data-orig></div></div>'+
+        '<div class="col"><div class="lbl">Corrección</div><div class="box" data-corr></div></div>'+
+      '</div>';
+    cont.appendChild(div);
+    cargarFoto(d.fotoId, div.querySelector("[data-orig]"));
+    cargarFoto(d.fotoCorreccionId, div.querySelector("[data-corr]"));
+  });
+}
+
+document.getElementById("filtros").addEventListener("click", e=>{
+  if(e.target.tagName!=="BUTTON") return;
+  document.querySelectorAll("#filtros button").forEach(b=>b.classList.remove("activo"));
+  e.target.classList.add("activo");
+  filtro=e.target.dataset.f;
+  render();
+});
+
+fetch(BACKEND+"?listar=1")
+  .then(r=>r.json())
+  .then(data=>{
+    if(!data.ok){ cont.innerHTML='<div class="vacio">Error: '+(data.error||"")+'</div>'; return; }
+    todas=data.lista;
+    render();
+  })
+  .catch(()=>{ cont.innerHTML='<div class="vacio">No se pudo conectar con el servidor.</div>'; });
+</script>
+</body>
+</html>
