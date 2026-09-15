@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot-ON — Corrección</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#fbf7ee; --ink:#2a2620; --muted:#7a715e; --line:#e3dac4;
+    --amber:#e2a73e; --amber-deep:#a9711a; --navy:#13327a; --red:#e1261c; --ok:#3e7c7b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:#10141b;
+    font-family:'Inter',sans-serif; color:var(--ink);
+    display:flex; justify-content:center; align-items:flex-start; padding:24px 14px;
+  }
+  .card{
+    background:var(--paper); width:100%; max-width:440px; border-radius:16px;
+    box-shadow:0 24px 50px -18px rgba(0,0,0,.5); overflow:hidden;
+  }
+  header{ padding:20px 22px 16px; border-bottom:1px dashed var(--line); }
+  header h1{ font-family:'Fraunces',serif; font-size:20px; margin:0; }
+  header .estado{
+    display:inline-block; margin-top:8px; font-size:12px; font-weight:600;
+    padding:3px 10px; border-radius:20px; background:#efe7d4; color:var(--amber-deep);
+  }
+  header .estado.resuelto{ background:#dcefe9; color:var(--ok); }
+  header .estado.leido{ background:#e5eaf6; color:var(--navy); }
+  .body{ padding:18px 22px 24px; }
+  .dato{ margin-bottom:12px; }
+  .dato .k{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .dato .v{ font-size:15px; margin-top:2px; }
+  .foto-wrap{ margin:16px 0; }
+  .foto-wrap img{ width:100%; border-radius:10px; display:block; }
+  .foto-wrap .ph{
+    width:100%; height:170px; border-radius:10px; background:#efe9db;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13px;
+  }
+  hr{ border:none; border-top:1px dashed var(--line); margin:20px 0; }
+  label.field{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+  input[type=file]{ width:100%; font-size:13px; margin-bottom:16px; }
+  .check{ display:flex; align-items:center; gap:9px; margin-bottom:18px; cursor:pointer; }
+  .check input{ width:18px; height:18px; }
+  .check span{ font-size:15px; }
+  button{
+    width:100%; background:var(--amber-deep); color:#fff8ea; border:none;
+    padding:13px; border-radius:10px; font-family:'Inter',sans-serif;
+    font-weight:600; font-size:15px; cursor:pointer; transition:background .2s;
+  }
+  button:hover{ background:#8f5f16; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .msg{ text-align:center; padding:30px 22px; }
+  .msg h2{ font-family:'Fraunces',serif; }
+  .spinner{
+    width:26px; height:26px; border:3px solid var(--line); border-top-color:var(--amber-deep);
+    border-radius:50%; animation:spin .8s linear infinite; margin:40px auto;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="spinner"></div>
+</div>
+
+<script>
+// URL del backend Apps Script (/exec)
+const BACKEND = "https://script.google.com/macros/s/AKfycbx2mFs_yfErRqgHd3RrUN3ou1yQnI97CAEISpePrSyinI2wrNi0839cpHUGHf4uq5hY/exec";
+
+const card = document.getElementById("card");
+const params = new URLSearchParams(location.search);
+const id = params.get("id");
+
+let fotoCorreccionBase64 = null;
+
+function msg(titulo, texto){
+  card.innerHTML = '<div class="msg"><h2>Bot-ON</h2><p><b>'+titulo+'</b></p>'+(texto?'<p>'+texto+'</p>':'')+'</div>';
+}
+
+async function comprimir(file){
+  return new Promise(res=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w=img.width, h=img.height, max=1280;
+        if(w>max){ h=Math.round(h*(max/w)); w=max; }
+        const c=document.createElement("canvas"); c.width=w; c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        res(c.toDataURL("image/jpeg",0.72));
+      };
+      img.onerror=()=>res(e.target.result);
+      img.src=e.target.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function cargar(){
+  if(!id){ msg("Link inválido","Falta el número de gestión."); return; }
+  try{
+    const r = await fetch(BACKEND+"?id="+encodeURIComponent(id));
+    const data = await r.json();
+    if(!data.ok){ msg("No encontrado", data.error||""); return; }
+    render(data);
+  }catch(err){
+    msg("Error de conexión","No se pudieron cargar los datos. Reintentá.");
+  }
+}
+
+function render(d){
+  const clase = d.estado==="Resuelto" ? "resuelto" : (d.estado==="Leído"?"leido":"");
+  card.innerHTML =
+    '<header><h1>Bot-ON — '+d.id+'</h1><span class="estado '+clase+'">'+d.estado+'</span></header>'+
+    '<div class="body">'+
+      '<div class="dato"><div class="k">Dirección</div><div class="v">'+d.direccion+'</div></div>'+
+      '<div class="dato"><div class="k">Comentario</div><div class="v">'+d.comentario+'</div></div>'+
+      '<div class="foto-wrap" id="fotoWrap"><div class="ph">Cargando foto…</div></div>'+
+      '<hr>'+
+      '<label class="field">Foto de corrección (opcional)</label>'+
+      '<input type="file" id="fotoInput" accept="image/*">'+
+      '<label class="check"><input type="checkbox" id="resuelto"><span>Marcar como resuelto</span></label>'+
+      '<button id="guardar">Guardar</button>'+
+    '</div>';
+
+  // cargar foto original
+  if(d.fotoId){
+    fetch(BACKEND+"?foto="+encodeURIComponent(d.fotoId))
+      .then(r=>r.json())
+      .then(f=>{
+        const wrap=document.getElementById("fotoWrap");
+        if(f.ok){ wrap.innerHTML='<img src="'+f.base64+'" alt="Foto original">'; }
+        else{ wrap.innerHTML='<div class="ph">No se pudo cargar la foto</div>'; }
+      })
+      .catch(()=>{ document.getElementById("fotoWrap").innerHTML='<div class="ph">No se pudo cargar la foto</div>'; });
+  } else {
+    document.getElementById("fotoWrap").innerHTML='<div class="ph">Sin foto adjunta</div>';
+  }
+
+  document.getElementById("fotoInput").addEventListener("change", async e=>{
+    const f=e.target.files[0];
+    if(f){ fotoCorreccionBase64 = await comprimir(f); }
+  });
+
+  document.getElementById("guardar").addEventListener("click", guardar);
+}
+
+async function guardar(){
+  const btn=document.getElementById("guardar");
+  btn.disabled=true; btn.textContent="Guardando…";
+  const resuelto=document.getElementById("resuelto").checked;
+
+  try{
+    await fetch(BACKEND, {
+      method:"POST",
+      mode:"no-cors",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        accion:"corregir",
+        id:id,
+        resuelto:resuelto,
+        fotoBase64:fotoCorreccionBase64
+      })
+    });
+    msg("¡Listo!","Se guardó la corrección de "+id+".");
+  }catch(err){
+    btn.disabled=false; btn.textContent="Reintentar";
+    alert("No se pudo guardar. Revisá la conexión.");
+  }
+}
+
+cargar();
+</script>
+</body>
+</html>
