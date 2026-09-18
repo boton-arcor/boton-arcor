@@ -277,21 +277,35 @@
     background: var(--paper);
   }
 
-  .dropzone{
+  .foto-botones{
+    display:flex;
+    gap:10px;
+  }
+  .foto-btn{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding: 20px 10px;
     border: 1.5px dashed var(--paper-line);
     border-radius:10px;
-    padding: 22px 14px;
-    text-align:center;
+    background:transparent;
+    color: var(--ink);
+    font-family:'Inter', sans-serif;
+    font-size:13px;
+    font-weight:500;
     cursor:pointer;
-    transition: border-color .2s ease, background .2s ease;
+    transition: border-color .2s ease, background .2s ease, color .2s ease;
   }
-  .dropzone:hover, .dropzone.drag{
+  .foto-btn:hover, .foto-btn:active{
     border-color: var(--amber);
-    background: rgba(226,167,62,.06);
+    background: rgba(226,167,62,.08);
+    color: var(--amber-deep);
   }
-  .dropzone svg{ margin-bottom:8px; }
-  .dropzone .cta{ font-size:13.5px; font-weight:500; }
-  .dropzone .hint{ font-size:11.5px; color: var(--ink-soft); margin-top:3px; }
+  .foto-btn svg{ color: var(--ink-soft); }
+  .foto-btn:hover svg, .foto-btn:active svg{ color: var(--amber-deep); }
 
   .line-input{
     width:100%;
@@ -509,27 +523,31 @@
     clearDock();
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="dropzone" id="dropzone">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#7a715e" stroke-width="1.6"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
-        <div class="cta">Subí o arrastrá una foto</div>
-        <div class="hint">JPG o PNG — se adjunta al parte</div>
+      <div class="foto-botones">
+        <button type="button" class="foto-btn" id="btnCamara">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+          <span>Sacar foto</span>
+        </button>
+        <button type="button" class="foto-btn" id="btnGaleria">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-9 8"/></svg>
+          <span>Elegir de galería</span>
+        </button>
       </div>
-      <input type="file" id="fileInput" accept="image/*" style="display:none">
+      <input type="file" id="inputCamara" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="inputGaleria" accept="image/*" style="display:none">
     `;
     dock.appendChild(wrap);
-    const dz = wrap.querySelector('#dropzone');
-    const input = wrap.querySelector('#fileInput');
+    const inputCamara = wrap.querySelector('#inputCamara');
+    const inputGaleria = wrap.querySelector('#inputGaleria');
 
-    dz.addEventListener('click', ()=> input.click());
-    ['dragover','dragenter'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add('drag'); }));
-    ['dragleave','drop'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove('drag'); }));
-    dz.addEventListener('drop', e=>{
-      const f = e.dataTransfer.files[0];
-      if(f) handleFile(f);
-    });
-    input.addEventListener('change', e=>{
-      const f = e.target.files[0];
-      if(f) handleFile(f);
+    wrap.querySelector('#btnCamara').addEventListener('click', ()=> inputCamara.click());
+    wrap.querySelector('#btnGaleria').addEventListener('click', ()=> inputGaleria.click());
+
+    [inputCamara, inputGaleria].forEach(inp=>{
+      inp.addEventListener('change', e=>{
+        const f = e.target.files[0];
+        if(f) handleFile(f);
+      });
     });
 
     function handleFile(f){
