@@ -26,7 +26,7 @@
   }
   .top .filtros button.activo{ background:var(--amber-deep); color:#fff8ea; border-color:var(--amber-deep); }
   .item{
-    background:var(--paper); border-radius:14px; padding:16px 18px; margin-bottom:14px;
+    background:var(--paper); border-radius:14px; padding:12px 16px; margin-bottom:11px;
     box-shadow:0 12px 26px -14px rgba(0,0,0,.5);
   }
   .item .head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
@@ -42,10 +42,17 @@
   .fotos{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
   .fotos .col .lbl{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
   .fotos .col .box{
-    width:100%; aspect-ratio:4/3; border-radius:9px; background:#efe9db; overflow:hidden;
-    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;
+    width:100%; height:120px; border-radius:9px; background:#efe9db; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:11px;
   }
-  .fotos .col .box img{ width:100%; height:100%; object-fit:cover; display:block; cursor:pointer; }
+  .fotos .col .box img{ max-width:100%; max-height:100%; object-fit:contain; display:block; cursor:pointer; }
+  .cerrar-btn{
+    margin-top:12px; width:100%; background:var(--ok); color:#fff;
+    border:none; padding:11px; border-radius:9px; font-family:'Inter',sans-serif;
+    font-weight:600; font-size:14px; cursor:pointer; transition:background .2s;
+  }
+  .cerrar-btn:hover{ background:#336665; }
+  .cerrar-btn:disabled{ opacity:.6; cursor:not-allowed; }
   .spinner{ width:28px; height:28px; border:3px solid #2a3550; border-top-color:var(--amber-deep); border-radius:50%; animation:spin .8s linear infinite; margin:60px auto; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   .vacio{ color:#c7cee0; text-align:center; padding:50px; }
@@ -102,6 +109,9 @@ function render(){
   lista.forEach(d=>{
     const div=document.createElement("div");
     div.className="item";
+    const cerrarBtn = d.estado==="Resuelto"
+      ? ''
+      : '<button class="cerrar-btn" data-cerrar="'+d.id+'">Cerrar caso</button>';
     div.innerHTML=
       '<div class="head"><span class="id">'+d.id+'</span>'+
       '<span class="estado '+estadoClase(d.estado)+'">'+d.estado+'</span></div>'+
@@ -110,10 +120,36 @@ function render(){
       '<div class="fotos">'+
         '<div class="col"><div class="lbl">Botoneada</div><div class="box" data-orig></div></div>'+
         '<div class="col"><div class="lbl">Corrección</div><div class="box" data-corr></div></div>'+
-      '</div>';
+      '</div>'+
+      cerrarBtn;
     cont.appendChild(div);
     cargarFoto(d.fotoId, div.querySelector("[data-orig]"));
     cargarFoto(d.fotoCorreccionId, div.querySelector("[data-corr]"));
+    const cb = div.querySelector("[data-cerrar]");
+    if(cb){ cb.addEventListener("click", ()=> cerrarCaso(d.id, cb)); }
+  });
+}
+
+function cerrarCaso(id, btn){
+  if(!confirm("¿Cerrar el caso "+id+"? Va a quedar como Resuelto.")) return;
+  btn.disabled = true;
+  btn.textContent = "Cerrando…";
+  fetch(BACKEND, {
+    method:"POST",
+    mode:"no-cors",
+    headers:{ "Content-Type":"text/plain;charset=utf-8" },
+    body: JSON.stringify({ accion:"corregir", id:id, resuelto:true })
+  })
+  .then(()=>{
+    // actualizamos el estado local y re-renderizamos
+    const item = todas.find(x=> x.id===id);
+    if(item){ item.estado = "Resuelto"; }
+    render();
+  })
+  .catch(()=>{
+    btn.disabled = false;
+    btn.textContent = "Cerrar caso";
+    alert("No se pudo cerrar el caso. Reintentá.");
   });
 }
 
