@@ -223,16 +223,6 @@
     padding-bottom:4px;
     color: var(--ink);
   }
-  .entry .edit-link{
-    display:block;
-    text-align:right;
-    font-size:10.5px;
-    color: var(--teal);
-    margin-top:5px;
-    cursor:pointer;
-    text-decoration:none;
-  }
-  .entry .edit-link:hover{ text-decoration:underline; }
 
   .photo-entry{ align-self:flex-end; }
   .polaroid{
@@ -349,6 +339,32 @@
 
   .go-btn.send{ background: var(--amber-deep); color:#fff8ea; }
   .go-btn.send:hover{ background:#8f5f16; }
+
+  .btn-fila{
+    display:flex;
+    gap:10px;
+    margin-top:12px;
+    align-items:stretch;
+  }
+  .btn-fila .go-btn{ margin-top:0; flex:1; }
+  .btn-cancelar{
+    flex-shrink:0;
+    width:48px;
+    border:1.5px solid var(--paper-line);
+    background:transparent;
+    color: var(--ink-soft);
+    border-radius:9px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition: border-color .2s ease, color .2s ease, background .2s ease;
+  }
+  .btn-cancelar:hover, .btn-cancelar:active{
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(178,74,61,.06);
+  }
 
   /* summary */
   .summary-card{
@@ -482,31 +498,23 @@
     scrollDown();
   }
 
-  function userLine(label, value, editStep){
+  function userLine(label, value){
     const e = document.createElement('div');
     e.className = 'entry';
     e.innerHTML =
       '<div class="field-label"><span class="dot"></span>'+label+'</div>'+
-      '<div class="field-value">'+value+'</div>'+
-      (editStep ? '<a class="edit-link" data-edit="'+editStep+'">editar</a>' : '');
+      '<div class="field-value">'+value+'</div>';
     chat.appendChild(e);
     scrollDown();
-    e.querySelectorAll('[data-edit]').forEach(a=>{
-      a.addEventListener('click', ()=> goToStep(a.dataset.edit));
-    });
   }
 
-  function userPhoto(dataUrl, name, editStep){
+  function userPhoto(dataUrl, name){
     const e = document.createElement('div');
     e.className = 'photo-entry';
     e.innerHTML =
-      '<div class="polaroid"><div class="tape"></div><img src="'+dataUrl+'" alt="Foto cargada"><div class="cap">'+name+'</div></div>'+
-      (editStep ? '<a class="edit-link" data-edit="'+editStep+'" style="margin-top:6px;">editar</a>' : '');
+      '<div class="polaroid"><div class="tape"></div><img src="'+dataUrl+'" alt="Foto cargada"><div class="cap">'+name+'</div></div>';
     chat.appendChild(e);
     scrollDown();
-    e.querySelectorAll('[data-edit]').forEach(a=>{
-      a.addEventListener('click', ()=> goToStep(a.dataset.edit));
-    });
   }
 
   function clearDock(){ dock.innerHTML = ''; }
@@ -551,27 +559,40 @@
     });
 
     function handleFile(f){
-      compressImage(f, 1280, 0.72).then(dataUrl=>{
+      // Mensaje de "procesando" mientras comprime (las fotos grandes tardan un toque)
+      clearDock();
+      const proc = document.createElement('div');
+      proc.style.cssText = 'text-align:center;padding:18px;color:#7a715e;font-size:13px;';
+      proc.textContent = 'Procesando la foto…';
+      dock.appendChild(proc);
+
+      compressImage(f, 1280, 0.7).then(dataUrl=>{
         data.photo = dataUrl;
-        data.photoName = f.name;
+        data.photoName = (f.name || 'foto').replace(/\.[a-z0-9]+$/i,'') + '.jpg';
         setStepState('photo','done');
-        userPhoto(data.photo, f.name, 'photo');
+        userPhoto(data.photo, data.photoName);
         clearDock();
         botTyping(()=> botSay('Perfecto recibido, indicame la dirección del lugar.'), 550);
         setTimeout(renderAddressStep, 950);
+      }).catch(()=>{
+        // Si NO se pudo comprimir, NO mandamos el original roto: avisamos y volvemos a pedir la foto.
+        clearDock();
+        botTyping(()=> botSay('No pude procesar esa foto (puede ser un formato no compatible). Probá sacar una foto nueva con la cámara o elegir otra.'), 400);
+        setTimeout(renderPhotoStep, 900);
       });
     }
   }
 
-  // Redimensiona y comprime la imagen en el navegador antes de mandarla,
-  // para que en datos móviles el envío sea mucho más rápido.
+  // Redimensiona y comprime la imagen a JPEG antes de mandarla.
+  // Si no logra comprimir de verdad, RECHAZA (no manda el original crudo, que rompe el mail/galería).
   function compressImage(file, maxWidth, quality){
-    return new Promise((resolve)=>{
-      const reader = new FileReader();
-      reader.onload = ev=>{
-        const img = new Image();
-        img.onload = ()=>{
-          let w = img.width, h = img.height;
+    return new Promise((resolve, reject)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{
+        try{
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if(!w || !h){ URL.revokeObjectURL(url); reject('sin dimensiones'); return; }
           if(w > maxWidth){
             h = Math.round(h * (maxWidth / w));
             w = maxWidth;
@@ -579,12 +600,24 @@
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = ()=> resolve(ev.target.result); // si falla, usamos el original sin comprimir
-        img.src = ev.target.result;
+
+          // Bajamos calidad hasta que pese razonable (< ~700 KB en base64)
+          let q = quality, out = canvas.toDataURL('image/jpeg', q);
+          while(out.length > 950000 && q > 0.4){
+            q -= 0.1;
+            out = canvas.toDataURL('image/jpeg', q);
+          }
+          URL.revokeObjectURL(url);
+          // Chequeo final: que realmente sea un data:image/jpeg
+          if(out.indexOf('data:image/jpeg') !== 0){ reject('no jpeg'); return; }
+          resolve(out);
+        }catch(err){
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
       };
-      reader.readAsDataURL(file);
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject('no se pudo cargar la imagen'); };
+      img.src = url;
     });
   }
 
@@ -608,7 +641,7 @@
     btn.addEventListener('click', ()=>{
       data.address = input.value.trim();
       setStepState('address','done');
-      userLine('Dirección', data.address, 'address');
+      userLine('Dirección', data.address);
       clearDock();
       botTyping(()=> botSay('Perfecto. Contame en pocas palabras qué pasó ahí.'), 550);
       setTimeout(renderCommentStep, 950);
@@ -622,7 +655,12 @@
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <textarea class="line-input" id="commentInput" placeholder="Describí la novedad brevemente...">${data.comment || ''}</textarea>
-      <button class="go-btn send" id="commentBtn" disabled>Enviar por mail</button>
+      <div class="btn-fila">
+        <button class="btn-cancelar" id="cancelBtn" title="Cancelar botoneada" aria-label="Cancelar botoneada">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18M8 6V4h8v2m-9 0v14a1 1 0 001 1h8a1 1 0 001-1V6M10 11v6M14 11v6"/></svg>
+        </button>
+        <button class="go-btn send" id="commentBtn" disabled>Enviar botoneada</button>
+      </div>
     `;
     dock.appendChild(wrap);
     const input = wrap.querySelector('#commentInput');
@@ -631,10 +669,16 @@
     input.dispatchEvent(new Event('input'));
     input.focus();
 
+    wrap.querySelector('#cancelBtn').addEventListener('click', ()=>{
+      if(confirm('¿Querés cancelar esta botoneada? Se va a borrar todo lo cargado.')){
+        resetFlow();
+      }
+    });
+
     btn.addEventListener('click', ()=>{
       data.comment = input.value.trim();
       setStepState('comment','done');
-      userLine('Comentario', data.comment, 'comment');
+      userLine('Comentario', data.comment);
 
       const card = document.createElement('div');
       card.className = 'summary-card';
