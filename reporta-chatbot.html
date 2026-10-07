@@ -566,7 +566,7 @@
       proc.textContent = 'Procesando la foto…';
       dock.appendChild(proc);
 
-      compressImage(f, 1280, 0.7).then(dataUrl=>{
+      prepararFoto(f, txt=>{ proc.textContent = txt; }).then(dataUrl=>{
         data.photo = dataUrl;
         data.photoName = (f.name || 'foto').replace(/\.[a-z0-9]+$/i,'') + '.jpg';
         setStepState('photo','done');
@@ -619,6 +619,70 @@
       img.onerror = ()=>{ URL.revokeObjectURL(url); reject('no se pudo cargar la imagen'); };
       img.src = url;
     });
+  }
+
+  // ===== Soporte HEIC (fotos de cámaras Samsung/iPhone que Chrome no sabe leer) =====
+  // Se busca primero en el propio repo (heic2any.min.js subido a GitHub) y si no, en el CDN.
+  const HEIC_LIBS = [
+    'heic2any.min.js',
+    'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js',
+    'https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js'
+  ];
+  let heicLibPromise = null;
+  function cargarScript(src){
+    return new Promise((res, rej)=>{
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = ()=> window.heic2any ? res() : rej('lib sin cargar');
+      s.onerror = ()=>{ s.remove(); rej('no se pudo bajar ' + src); };
+      document.head.appendChild(s);
+    });
+  }
+  function cargarHeicLib(){
+    if(window.heic2any) return Promise.resolve();
+    if(!heicLibPromise){
+      heicLibPromise = HEIC_LIBS.reduce(
+        (cadena, src)=> cadena.catch(()=> cargarScript(src)),
+        Promise.reject()
+      ).catch(err=>{ heicLibPromise = null; throw err; });
+    }
+    return heicLibPromise;
+  }
+
+  // Detecta HEIC/HEIF por tipo, extensión o por la "firma" interna del archivo
+  async function esHeic(file){
+    const t = (file.type || '').toLowerCase();
+    const n = (file.name || '').toLowerCase();
+    if(t.includes('heic') || t.includes('heif') || /\.(heic|heif)$/.test(n)) return true;
+    try{
+      const buf = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+      const firma = String.fromCharCode.apply(null, buf.slice(4, 12));
+      return /^ftyp(heic|heix|hevc|hevx|heim|heis|mif1|msf1)/.test(firma);
+    }catch(e){ return false; }
+  }
+
+  function conTimeout(promesa, ms){
+    return Promise.race([promesa, new Promise((_, rej)=> setTimeout(()=> rej('timeout'), ms))]);
+  }
+
+  async function heicAJpeg(file){
+    await cargarHeicLib();
+    const out = await conTimeout(window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 }), 60000);
+    return Array.isArray(out) ? out[0] : out;
+  }
+
+  // Punto único de entrada: devuelve SIEMPRE un JPEG comprimido válido o rechaza.
+  async function prepararFoto(file, avisar){
+    try{
+      return await compressImage(file, 1280, 0.7);
+    }catch(err){
+      if(await esHeic(file)){
+        if(avisar) avisar('Convirtiendo la foto (formato HEIC), puede tardar unos segundos…');
+        const jpg = await heicAJpeg(file);
+        return await compressImage(jpg, 1280, 0.7);
+      }
+      throw err;
+    }
   }
 
   // --- STEP 2: ADDRESS ---
